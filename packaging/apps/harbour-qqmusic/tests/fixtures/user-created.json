@@ -1,0 +1,31 @@
+{
+  "data": {
+    "disslist": [
+      {
+        "tid": 9451963602,
+        "dir_show": 1,
+        "diss_name": "自建 &amp; 歌单",
+        "diss_cover": "https://y.gtimg.cn/music/photo_new/created.jpg"
+      },
+      {
+        "tid": 9451963603,
+        "dir_show": 0,
+        "diss_name": "隐藏歌单",
+        "diss_cover": "not-used"
+      },
+      {
+        "tid": 9451963604,
+        "dir_show": 0,
+        "diss_name": "我喜欢",
+        "diss_cover": "not-used",
+        "unknown_member": "ignored"
+      },
+      {
+        "tid": 0,
+        "dir_show": 0,
+        "diss_name": "我喜欢",
+        "diss_cover": "not-used"
+      }
+    ]
+  }
+}

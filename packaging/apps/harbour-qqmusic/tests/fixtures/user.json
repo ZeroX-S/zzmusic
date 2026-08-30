@@ -1,0 +1,14 @@
+{
+  "base": {
+    "data": {
+      "map_userinfo": {
+        "1000123456": {
+          "nick": "测试用户",
+          "headurl": "https://thirdqq.qlogo.cn/g?b=oidb&k=fake&spec=100",
+          "unknown_member": "ignored"
+        }
+      }
+    }
+  },
+  "unknown_member": "ignored"
+}

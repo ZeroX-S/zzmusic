@@ -1,0 +1,16 @@
+{
+  "req_1": {
+    "code": 0,
+    "data": {
+      "midurlinfo": [
+        {
+          "filename": "M500001SANITIZED01001SANITIZED01.mp3",
+          "purl": "M500002SANITIZED02.mp3?guid=10000&vkey=not-a-live-token&uin=&fromtag=291"
+        }
+      ],
+      "sip": [
+        "http://aqqmusic.tc.qq.com/"
+      ]
+    }
+  }
+}

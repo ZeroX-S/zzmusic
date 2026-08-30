@@ -1,0 +1,24 @@
+{
+  "cdlist": [
+    {
+      "disstid": "9451963602",
+      "dissname": "通勤 &amp; 收藏",
+      "logo": "https://y.gtimg.cn/music/photo_new/playlist-library.jpg",
+      "songlist": [
+        {
+          "songmid": "003OUlho2HcRHC",
+          "songname": "晨光 &amp; 海",
+          "singer": [
+            {"name": "测试歌手"}
+          ],
+          "albummid": "000ABCdef23456",
+          "albumname": "测试专辑",
+          "switch": 2,
+          "unknown_member": "ignored"
+        }
+      ],
+      "unknown_member": "ignored"
+    }
+  ],
+  "unknown_member": "ignored"
+}

@@ -1,0 +1,26 @@
+# Local build output
+build/
+artifacts/
+RPMS/
+SRPMS/
+*.rpm
+*.qm
+
+# IDE and platform files
+.DS_Store
+*.user
+*.user.*
+.vscode/
+.idea/
+
+# Private device evidence
+.codex-device-shots/
+captures/
+logs/
+backups/
+*.log
+*.png.part
+
+# Python
+__pycache__/
+*.pyc

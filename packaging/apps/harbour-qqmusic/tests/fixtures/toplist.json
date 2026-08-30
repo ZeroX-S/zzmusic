@@ -1,0 +1,24 @@
+{
+  "toplist": {
+    "data": {
+      "songInfoList": [
+        {
+          "mid": "006ABCdef23456",
+          "name": "榜单歌曲 &amp; 一",
+          "switch": null,
+          "singer": [
+            {"mid": "007ABCdef23456", "name": "榜单歌手"}
+          ],
+          "album": {
+            "mid": "008ABCdef23456",
+            "name": "榜单专辑"
+          }
+        }
+      ],
+      "data": {
+        "frontPicUrl": "http://y.gtimg.cn/music/photo_new/T002R300x300M000chart.jpg",
+        "title": "热歌榜 &amp; 周榜"
+      }
+    }
+  }
+}

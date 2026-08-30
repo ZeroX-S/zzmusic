@@ -1,0 +1,37 @@
+{
+  "req": {
+    "data": {
+      "body": {
+        "song": {
+          "list": [
+            {
+              "mid": "003OUlho2HcRHC",
+              "name": "晨光 &amp; 海",
+              "singer": [
+                {"mid": "002ABCdef23456", "name": "歌手 &quot;甲&quot;"}
+              ],
+              "album": {
+                "mid": "000ABCdef23456",
+                "name": "专辑 &amp; 一"
+              },
+              "switch": null,
+              "action": {"switch": 2},
+              "unknown_member": "ignored"
+            },
+            {
+              "songmid": "001ABCdef23456",
+              "songname": "旧版歌曲",
+              "singer": [
+                {"mid": "004ABCdef23456", "name": "旧版歌手"}
+              ],
+              "albummid": "005ABCdef23456",
+              "albumname": "旧版专辑",
+              "switch": 0
+            }
+          ]
+        }
+      },
+      "meta": {"sum": 72}
+    }
+  }
+}

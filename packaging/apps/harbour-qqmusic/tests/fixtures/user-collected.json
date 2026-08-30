@@ -1,0 +1,19 @@
+{
+  "data": {
+    "cdlist": [
+      {
+        "dissid": 9451963605,
+        "dir_show": 1,
+        "dissname": "收藏 &amp; 歌单",
+        "logo": "https://y.gtimg.cn/music/photo_new/collected.jpg",
+        "unknown_member": "ignored"
+      },
+      {
+        "dissid": 9451963606,
+        "dir_show": 0,
+        "dissname": "隐藏收藏",
+        "logo": "not-used"
+      }
+    ]
+  }
+}

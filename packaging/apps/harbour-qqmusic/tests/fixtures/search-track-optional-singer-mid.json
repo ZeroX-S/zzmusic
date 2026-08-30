@@ -1,0 +1,25 @@
+{
+  "req": {
+    "data": {
+      "body": {
+        "song": {
+          "list": [
+            {
+              "mid": "009ABCdef23456",
+              "name": "可选歌手标识",
+              "singer": [
+                {"name": "无 MID 歌手"}
+              ],
+              "album": {
+                "mid": "00AABCdef23456",
+                "name": "示例专辑"
+              },
+              "switch": 2
+            }
+          ]
+        }
+      },
+      "meta": {"sum": 1}
+    }
+  }
+}

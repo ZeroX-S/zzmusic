@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=ZZ Music
+Name[zh_CN]=ZZ Music
+Comment=Native ZZ Music client for QQ Music
+Comment[zh_CN]=原生 ZZ Music 客户端
+Exec=/usr/bin/harbour-qqmusic
+Icon=harbour-qqmusic
+X-Nemo-Application-Type=silica-qt5
+
+[X-Sailjail]
+OrganizationName=org.bonito.qqmusic
+ApplicationName=harbour-qqmusic
+Permissions=Internet;Audio;Secrets

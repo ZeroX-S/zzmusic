@@ -1,0 +1,29 @@
+{
+  "req": {
+    "data": {
+      "body": {
+        "song": {
+          "list": [
+            {
+              "songmid": "001ABCdef23456",
+              "songname": "旧版主标题",
+              "singer": [
+                {"mid": "004ABCdef23456", "name": "旧版歌手"}
+              ],
+              "albummid": "005ABCdef23456",
+              "albumname": "旧版主专辑",
+              "mid": "003OUlho2HcRHC",
+              "name": "现代干扰标题",
+              "album": {
+                "mid": "000ABCdef23456",
+                "name": "现代干扰专辑"
+              },
+              "switch": 2
+            }
+          ]
+        }
+      },
+      "meta": {"sum": 1}
+    }
+  }
+}

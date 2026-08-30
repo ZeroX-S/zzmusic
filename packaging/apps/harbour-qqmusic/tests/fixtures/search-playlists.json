@@ -1,0 +1,20 @@
+{
+  "req": {
+    "data": {
+      "body": {
+        "songlist": {
+          "list": [
+            {
+              "dissid": "9451963602",
+              "dissname": "通勤 &amp; 放松",
+              "imgurl": "https://y.gtimg.cn/music/photo_new/T002R300x300M000playlist.jpg",
+              "creator": {"name": "测试 &quot;用户&quot;"},
+              "song_count": 24
+            }
+          ]
+        }
+      },
+      "meta": {"sum": 9}
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "categories": [
+      {
+        "categoryGroupName": "语种 &amp; 风格",
+        "usable": 1,
+        "items": [
+          {"categoryId": 165, "categoryName": "华语 &amp; 流行"},
+          {"categoryId": 166, "categoryName": "欧美"}
+        ]
+      },
+      {
+        "categoryGroupName": "不可用",
+        "usable": 0,
+        "items": [
+          {"categoryId": 999, "categoryName": "隐藏"}
+        ]
+      },
+      {
+        "categoryGroupName": "场景",
+        "usable": 1,
+        "items": []
+      }
+    ],
+    "unknown_member": {"ignored": true}
+  }
+}
