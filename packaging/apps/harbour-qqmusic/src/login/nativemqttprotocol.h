@@ -60,6 +60,7 @@ public:
         quint8 flags = 0;
         quint8 reasonCode = 0;
         bool sessionPresent = false;
+        int serverKeepAliveSeconds = -1;
         quint16 packetId = 0;
         QByteArray topic;
         QByteArray publishType;

@@ -52,6 +52,7 @@ private slots:
     void socketSslErrors(const QList<QSslError> &errors);
 
 private:
+    friend class NativeLoginTransportTest;
     enum Phase {
         Idle,
         Encrypting,

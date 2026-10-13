@@ -14,6 +14,7 @@ docs/qqmusic/decisions/ADR-006-normal-launch-and-ambience.md
 docs/qqmusic/decisions/ADR-007-build-identity-and-rollback.md
 docs/qqmusic/decisions/ADR-008-native-qt5-qr-login.md
 docs/qqmusic/decisions/README.md
+docs/releases/native-v1.0.0-27.md
 packaging/apps/harbour-qqmusic/COMMUNITY-NOTICE.md
 packaging/apps/harbour-qqmusic/LICENSE
 packaging/apps/harbour-qqmusic/LICENSE.listen1
@@ -123,6 +124,7 @@ packaging/apps/harbour-qqmusic/tests/auto/tst_models.cpp
 packaging/apps/harbour-qqmusic/tests/auto/tst_mpriscontroller.cpp
 packaging/apps/harbour-qqmusic/tests/auto/tst_nativeloginmanager.cpp
 packaging/apps/harbour-qqmusic/tests/auto/tst_nativeloginprotocol.cpp
+packaging/apps/harbour-qqmusic/tests/auto/tst_nativelogintransport.cpp
 packaging/apps/harbour-qqmusic/tests/auto/tst_nativemqttprotocol.cpp
 packaging/apps/harbour-qqmusic/tests/auto/tst_platformaudiomonitor.cpp
 packaging/apps/harbour-qqmusic/tests/auto/tst_playbackcontroller.cpp

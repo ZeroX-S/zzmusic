@@ -204,6 +204,79 @@ private slots:
         QCOMPARE(store.nickname(), QStringLiteral("Account B"));
     }
 
+    void retriesTransientValidationWithoutRescanning()
+    {
+        for (int profileStage = 0; profileStage < 2; ++profileStage) {
+            QqCookieJar active;
+            QqCookieJar candidate;
+            FakeValidationService service;
+            SessionStore store(&active, &service, &candidate);
+            FakeSecretsBridge bridge;
+            QVERIFY(store.bindBridge(&bridge));
+            QSignalSpy failures(&store, SIGNAL(candidateFailed()));
+            store.submitCandidate(session("o10001", "key-a"));
+            if (profileStage)
+                service.authenticate();
+            const int previousRequests = service.operations.size();
+            const quint64 oldOperation = service.operations.last();
+            ServiceError error;
+            error.operationId = oldOperation;
+            error.kind = ErrorKind::Timeout;
+            error.diagnosticCode = QStringLiteral("qq.transport.timeout");
+            emit service.failed(error);
+            QCOMPARE(failures.count(), 0);
+            QCOMPARE(bridge.storeCalls, 0);
+            QTRY_COMPARE(service.operations.size(), previousRequests + 1);
+            QVERIFY(service.operations.last() != oldOperation);
+            emit service.failed(error); // Late failure from the previous request.
+            QCOMPARE(failures.count(), 0);
+            if (profileStage)
+                service.succeedProfile("10001", "Account A");
+            else
+                service.succeed("10001", "Account A");
+            QTRY_COMPARE(bridge.storeCalls, 1);
+            QVERIFY(active.isEmpty());
+            emit bridge.storeFinished(true, 0);
+            QVERIFY(store.loggedIn());
+            QCOMPARE(failures.count(), 0);
+        }
+    }
+
+    void validationRetryIsBoundedAndSupersededByNewCandidate()
+    {
+        QqCookieJar active;
+        QqCookieJar candidate;
+        FakeValidationService service;
+        SessionStore store(&active, &service, &candidate);
+        FakeSecretsBridge bridge;
+        QVERIFY(store.bindBridge(&bridge));
+        QSignalSpy failures(&store, SIGNAL(candidateFailed()));
+        store.submitCandidate(session("o10001", "key-a"));
+        ServiceError error;
+        error.kind = ErrorKind::Offline;
+        error.operationId = service.operations.last();
+        emit service.failed(error);
+        QTRY_COMPARE(service.operations.size(), 2);
+        error.operationId = service.operations.last();
+        emit service.failed(error);
+        QCOMPARE(failures.count(), 1);
+        QTest::qWait(250);
+        QCOMPARE(service.operations.size(), 2);
+        QVERIFY(candidate.isEmpty());
+        QCOMPARE(bridge.storeCalls, 0);
+
+        store.load();
+        emit bridge.loadFinished(true, 0, QString::fromLatin1(
+            CookiePolicy::serialize(session("o10001", "key-a")).toBase64()));
+        error.operationId = service.operations.last();
+        emit service.failed(error);
+        store.submitCandidate(session("o20002", "key-b"));
+        const int requests = service.operations.size();
+        QTest::qWait(250);
+        QCOMPARE(service.operations.size(), requests);
+        QCOMPARE(service.lastUin, QStringLiteral("20002"));
+    }
+
     void authenticationFailureNeverRequestsProfileOrWritesSecret()
     {
         QqCookieJar active;

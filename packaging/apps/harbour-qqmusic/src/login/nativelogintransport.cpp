@@ -260,8 +260,13 @@ bool NativeWebSocketTransport::parseHandshake()
     const QByteArray headerBytes = m_input.left(headerEnd);
     m_input.remove(0, headerEnd + 4);
     const QList<QByteArray> lines = headerBytes.split('\n');
-    if (lines.isEmpty()
-            || lines.first().trimmed() != QByteArrayLiteral("HTTP/1.1 101 Switching Protocols")) {
+    const QByteArray status = lines.isEmpty() ? QByteArray()
+        : lines.first().trimmed();
+    // HTTP reason phrases are optional and can vary by server/proxy. The
+    // version and numeric status, together with the headers below, define
+    // whether this is the expected WebSocket upgrade.
+    if (status != QByteArrayLiteral("HTTP/1.1 101")
+            && !status.startsWith(QByteArrayLiteral("HTTP/1.1 101 "))) {
         failClosed(QStringLiteral("qq.login.websocket.handshake.status"));
         return false;
     }

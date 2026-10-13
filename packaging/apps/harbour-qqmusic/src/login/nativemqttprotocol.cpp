@@ -340,6 +340,15 @@ bool readProperties(Reader *reader,
             if (!properties.takeU16(&ignored)) {
                 return false;
             }
+            if (id == PropertyServerKeepAlive) {
+                if (packet->type != NativeMqttProtocol::ConnAck
+                        || packet->serverKeepAliveSeconds >= 0) {
+                    if (diagnosticCode)
+                        *diagnosticCode = QByteArrayLiteral("server-keepalive");
+                    return false;
+                }
+                packet->serverKeepAliveSeconds = ignored;
+            }
             break;
         }
         case ShapeFourByte: {

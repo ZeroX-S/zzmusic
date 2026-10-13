@@ -67,6 +67,14 @@ run evidence. Never substitute a historical fixed filename or the newest RPM.
       the `cancelled` marker, removes the QR, and preserves any active session.
 - [ ] An unscanned QR reaches the bounded `timeout` state and can start a fresh
       generation without reusing the old challenge.
+- [ ] QR presentation waits for `mqtt_subscribed`; an unscanned reconnect hides
+      the QR until the new subscription is acknowledged.
+- [ ] A connection with no MQTT ping response reaches a bounded retry/failure;
+      repeated brief successful reconnects do not reset the attempt retry limit.
+- [ ] A scan just before QR expiry gets its full exchange deadline, and late
+      packets after cancellation or candidate submission do not alter the UI.
+- [ ] After a Secrets daemon restart/cold start, candidate storage can request
+      system unlock and commits only after storage reports success.
 - [ ] A user-authorized scan advances `scanned`, `validating`, and `success` in
       order, with a candidate-submitted marker and a SessionStore activation
       marker from the same attempt.
@@ -91,6 +99,11 @@ run evidence. Never substitute a historical fixed filename or the newest RPM.
       each terminal state is bounded and leaves playback controls responsive.
 - [ ] Play, pause, previous, next, seek, repeat, queue selection, remove, and
       clear each mutate state once.
+- [ ] On Sailfish OS 5.1, pausing after measurable progress preserves both the
+      MPRIS position and the visible duration for at least three seconds; resume
+      continues from the preserved position rather than from the beginning.
+- [ ] On Sailfish OS 5.2, the same pause/resume probe advances without a media
+      reload or an application PID change.
 - [ ] Lyrics advance with playback; translations appear only when available.
 - [ ] Missing lyrics and unavailable tracks terminate without an infinite retry.
 - [ ] Headset removal pauses playback and does not restart it on reconnect.

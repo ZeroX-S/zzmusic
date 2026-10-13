@@ -13,6 +13,7 @@ TARGET="${TARGET:-SailfishOS-5.1.0.11-aarch64}"
 SDK_CHROOT="${SDK_CHROOT:-/opt/sailfish-hadk/platform/sdks/sfossdk/sdk-chroot}"
 SDK_USER="${SDK_USER:-builder}"
 BUILD_LABEL="${QQMUSIC_BUILD_LABEL:?QQMUSIC_BUILD_LABEL must be set}"
+BUILD_JOBS="${QQMUSIC_BUILD_JOBS:-1}"
 VERSION_MANIFEST="$PACKAGE_DIR/version.json"
 BUILD_IDENTITY="$PROJECT_ROOT/.qqmusic-build-identity.json"
 VERSION_PARSER="$PROJECT_ROOT/vm-deploy/scripts/qqmusic-version.py"
@@ -33,6 +34,10 @@ case "$OUTPUT_DIR" in
 esac
 case "$BUILD_LABEL" in
     ''|*[!A-Za-z0-9_-]*) fail "QQMUSIC_BUILD_LABEL is unsafe" ;;
+esac
+case "$BUILD_JOBS" in
+    [1-8]) ;;
+    *) fail "QQMUSIC_BUILD_JOBS must be an integer from 1 to 8" ;;
 esac
 case "$PROJECT_ROOT$OUTPUT_DIR$TARGET$SDK_USER$BUILD_LABEL" in
     *[!A-Za-z0-9_./-]*) fail "build paths and identifiers contain unsupported characters" ;;
@@ -84,7 +89,7 @@ export LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH
 cd $main_build
 mb2 -t $TARGET build-init
 mb2 -t $TARGET build-shell env CFLAGS='$main_flags' CXXFLAGS='$main_flags' LDFLAGS='$main_ldflags' qmake '$sdk_package_dir/src/app.pro' 'QMAKE_CFLAGS_RELEASE=$main_flags' 'QMAKE_CXXFLAGS_RELEASE=$main_flags' 'QMAKE_LFLAGS_RELEASE=$main_ldflags'
-mb2 -t $TARGET build-shell make -j1
+mb2 -t $TARGET build-shell make -j$BUILD_JOBS
 mb2 -t $TARGET build-shell lrelease '$sdk_package_dir/translations/harbour-qqmusic-zh_CN.ts' -qm '$main_build/harbour-qqmusic-zh_CN.qm'
 test -x '$main_build/harbour-qqmusic'
 test -s '$main_build/harbour-qqmusic-zh_CN.qm'"

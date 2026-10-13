@@ -2,7 +2,7 @@
   "schema": 1,
   "name": "zzmusic",
   "version": "1.0.0",
-  "release_prefix": "25.bonito.dev",
+  "release_prefix": "27.bonito.dev",
   "architecture": "aarch64",
   "source_date_epoch": 1784937600
 }

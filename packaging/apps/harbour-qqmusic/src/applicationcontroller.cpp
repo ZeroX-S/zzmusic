@@ -349,7 +349,9 @@ QString ApplicationController::userUin() const
 
 void ApplicationController::setUserUin(const QString &uin)
 {
-    if (m_userUin == uin) {
+    // A validated re-login refreshes credentials even when the identity is
+    // unchanged. Invalidate operations still using the previous active jar.
+    if (m_userUin == uin && m_loginStatus != QStringLiteral("validating")) {
         return;
     }
     const quint64 oldCreatedOperationId = m_myMusicOperationId;
@@ -703,10 +705,14 @@ void ApplicationController::setNativeLoginManager(
     connect(m_loginManager, &NativeLoginManager::attemptFailed,
             this, [this](const QString &attemptId,
                          const ServiceError &error) {
+        if (!m_loginManager || attemptId != m_loginManager->attemptId())
+            return;
         qInfo().noquote().nospace()
             << "qqmusic_login component=app event=attempt_failed attempt="
             << attemptId << " diagnostic=" << error.diagnosticCode;
-        setLoginPresentation(QStringLiteral("error"), QString(), 0, false,
+        setLoginPresentation(error.kind == ErrorKind::Timeout
+                                 ? QStringLiteral("timeout")
+                                 : QStringLiteral("error"), QString(), 0, false,
                              error.diagnosticCode);
         if (error.kind != ErrorKind::Timeout
                 && error.kind != ErrorKind::Cancelled) {
@@ -1329,6 +1335,7 @@ void ApplicationController::confirmExpiredSessionRemoval()
 
 void ApplicationController::sessionActivated(const UserProfile &profile)
 {
+    const bool candidateActivation = m_loginStatus == QStringLiteral("validating");
     qInfo().noquote()
         << "qqmusic-session app status=activated";
     setUserUin(profile.uin);
@@ -1352,7 +1359,7 @@ void ApplicationController::sessionActivated(const UserProfile &profile)
     }
     refreshHome();
     if (!m_searchQuery.isEmpty()
-            && m_searchAccountUin != profile.uin) {
+            && (candidateActivation || m_searchAccountUin != profile.uin)) {
         search(m_searchQuery);
     }
 }
@@ -1718,13 +1725,29 @@ void ApplicationController::serviceFailed(const ServiceError &error)
 {
     qWarning() << "QQ Music service failure: kind=" << int(error.kind)
                << "operation=" << error.operationId;
-    if (error.kind == ErrorKind::AuthenticationExpired && m_sessionStore) {
+    // This service still owns requests made with the previous active jar.
+    // Candidate authentication uses SessionStore's separate service/jar; an
+    // old request must not cancel that validation or its Secrets commit.
+    const bool currentAccountRequest = error.operationId != 0
+        && !m_userUin.isEmpty()
+        && (error.operationId == m_myMusicOperationId
+            || error.operationId == m_collectedLibraryOperationId
+            || (error.operationId == m_searchOperationId
+                && m_searchAccountUin == m_userUin)
+            || (error.operationId == m_homeOperationId
+                && (m_homeStage == HomeStage::DailyThirty
+                    || m_homeStage == HomeStage::GuessYouLike)));
+    if (error.kind == ErrorKind::AuthenticationExpired && m_sessionStore
+            && currentAccountRequest
+            && m_loginStatus != QStringLiteral("validating")) {
         const bool firstExpiry = !m_authenticationRemovalPending;
         m_sessionStore->markAuthenticationExpired();
         if (firstExpiry) {
             emit authenticationExpired();
         }
     } else if (error.kind == ErrorKind::AuthenticationExpired
+               && currentAccountRequest
+               && m_loginStatus != QStringLiteral("validating")
                && !m_authenticationRemovalPending) {
         m_authenticationRemovalPending = true;
         emit authenticationRemovalPendingChanged();

@@ -175,7 +175,9 @@ private:
     bool m_resumeAfterInterruption;
     bool m_pausePositionGuard;
     bool m_pauseBackendResetLogged;
+    bool m_pauseBackendNeedsReload;
     qint64 m_pausedPositionMs;
+    qint64 m_pausedDurationMs;
 };
 
 #endif

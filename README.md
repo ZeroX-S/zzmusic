@@ -6,7 +6,7 @@
 
 **ZZ Music** 是面向 Sailfish OS 的非官方 QQ 音乐原生客户端。应用使用 Qt 5、Sailfish Silica 和 Sailjail，针对手机触控、Cover 与系统媒体控制进行了适配。
 
-当前首个公开基线为 **native-v1.0.0-25**，对应已在真机验收的 AArch64 development RPM。
+当前公开版本为 **native-v1.0.0-27**，重点修复扫码登录竞态、同账号重新登录和 Sailfish 5.1 暂停进度归零问题。此版本为 AArch64 development prerelease，自动化及服务连通检查已通过，真实扫码与 Secrets 提交仍待实机确认。
 
 ## 功能
 
@@ -21,27 +21,30 @@
 
 ## 安装
 
-从 [native-v1.0.0-25 Release](https://github.com/ZeroX-S/zzmusic/releases/tag/native-v1.0.0-25) 下载：
+从 [native-v1.0.0-27 Release](https://github.com/ZeroX-S/zzmusic/releases/tag/native-v1.0.0-27) 下载：
 
 ~~~text
-zzmusic-1.0.0-25.bonito.dev.20260830t024809z.7585b5755902.aarch64.rpm
-SHA-256: 3f0ba8356b2d53097bee308ecd31021c38c86d97aab3115c04c3b26f3011d3ef
+zzmusic-1.0.0-27.bonito.dev.20261013t113645z.8ef344bc6f8b.aarch64.rpm
+SHA-256: 923c3d70a7ea1d3afb10503984343b001051509c134e7d1f74d36ebe3f3e8214
 ~~~
 
 在 AArch64 Sailfish OS 设备上安装：
 
 ~~~sh
 devel-su zypper install --no-recommends \
-  ./zzmusic-1.0.0-25.bonito.dev.20260830t024809z.7585b5755902.aarch64.rpm
+  ./zzmusic-1.0.0-27.bonito.dev.20261013t113645z.8ef344bc6f8b.aarch64.rpm
 ~~~
 
 安装包名称为 **zzmusic**，应用显示名称为 **ZZ Music**。当前版本使用 **/usr/bin/harbour-qqmusic** 和 **harbour-qqmusic.desktop** 作为兼容运行标识。
 
+图标：[1024×1024 原图](packaging/apps/harbour-qqmusic/icons/harbour-qqmusic-master.png) · [172×172 PNG](packaging/apps/harbour-qqmusic/icons/generated/172x172/harbour-qqmusic.png)。Release 同时提供独立图标附件。
+
 ## 兼容性与验证
 
 - 构建兼容目标：**SailfishOS-5.1.0.11-aarch64**，Qt **5.6.3**。
-- 真机验收：Sailfish OS **5.2.0.16** / AArch64。
-- 已验证二维码登录、会话恢复、登录态单曲搜索、播放、暂停/恢复、MPRIS、Cover 和 RPM 完整性。
+- 完整 SDK 回归：25 个 C++ 套件 **482/482**，QML **44/44**；最终会话隔离补丁另通过应用控制器 **34/34** 定向回归。
+- Sailfish 目标库下真实服务的出码、MQTT 订阅、取消和重新出码连续 **3 轮通过**，未执行账号扫码或写入会话。
+- 专用与汇总 RPM 校验通过。**本版尚未完成真实扫码、Secrets 提交及 5.1 手机暂停/恢复验收**；不沿用旧版的实机结果作为本版通过证据。
 - 该 RPM 为 development prerelease；不同源码不会复用同一 NEVRA。
 
 构建与测试方法见 [BUILDING.md](BUILDING.md)，本次发布说明见 [RELEASE_NOTES.md](RELEASE_NOTES.md)。

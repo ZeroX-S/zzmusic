@@ -250,7 +250,9 @@ QtObject {
         accessControlMode: Secrets.SecretManager.OwnerOnlyMode
         storagePluginName: manager.defaultStoragePluginName
         encryptionPluginName: manager.defaultEncryptionPluginName
-        userInteractionMode: Secrets.SecretManager.PreventInteraction
+        // A cold start or daemon restart can relock the collection. Let the
+        // system unlock it rather than discard a successfully scanned login.
+        userInteractionMode: Secrets.SecretManager.SystemInteraction
         onStatusChanged: {
             if (status !== Secrets.Request.Finished)
                 return
@@ -272,7 +274,7 @@ QtObject {
     property QtObject storeRequestObject: Secrets.StoreSecretRequest {
         id: storeRequest
         manager: manager
-        userInteractionMode: Secrets.SecretManager.PreventInteraction
+        userInteractionMode: Secrets.SecretManager.SystemInteraction
         onStatusChanged: {
             if (status === Secrets.Request.Finished) {
                 console.info("qqmusic-login secrets collection_store_finished"

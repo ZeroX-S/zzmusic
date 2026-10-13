@@ -122,8 +122,10 @@ public:
         : AudioEngine(parent, false)
         , autoLoad(true)
         , resetPositionOnPause(false)
+        , resetDurationOnPause(false)
         , resetPositionAfterPlay(false)
         , emitPositionOnSeek(true)
+        , loadCount(0)
         , playCount(0)
         , pauseCount(0)
         , stopCount(0)
@@ -133,6 +135,7 @@ public:
 
     void load(const QUrl &url) override
     {
+        ++loadCount;
         loadedUrl = url;
         if (autoLoad) {
             emit loaded();
@@ -153,6 +156,9 @@ public:
         ++pauseCount;
         if (resetPositionOnPause) {
             emit positionChanged(0);
+        }
+        if (resetDurationOnPause) {
+            emit durationChanged(0);
         }
         emit paused();
     }
@@ -192,6 +198,11 @@ public:
         emit positionChanged(positionMs);
     }
 
+    void publishDuration(qint64 durationMs)
+    {
+        emit durationChanged(durationMs);
+    }
+
     void publishStopped()
     {
         emit stopped();
@@ -199,8 +210,10 @@ public:
 
     bool autoLoad;
     bool resetPositionOnPause;
+    bool resetDurationOnPause;
     bool resetPositionAfterPlay;
     bool emitPositionOnSeek;
+    int loadCount;
     int playCount;
     int pauseCount;
     int stopCount;
@@ -534,22 +547,29 @@ private slots:
         PlaybackController controller(&service, &engine);
         controller.replaceQueue(tracks(1));
         service.succeed();
+        QCOMPARE(engine.loadCount, 1);
+        engine.publishDuration(180000);
         engine.publishPosition(42000);
+        QCOMPARE(controller.durationMs(), qint64(180000));
         QCOMPARE(controller.positionMs(), qint64(42000));
 
         engine.resetPositionOnPause = true;
+        engine.resetDurationOnPause = true;
         controller.pause();
         QCOMPARE(controller.state(), int(PlaybackController::Paused));
         QCOMPARE(controller.positionMs(), qint64(42000));
+        QCOMPARE(controller.durationMs(), qint64(180000));
 
-        engine.publishStopped();
-        QCOMPARE(controller.state(), int(PlaybackController::Paused));
+        // The legacy playbin backend may publish a small non-zero position
+        // after its reset. It is still reset noise, not progress.
+        engine.publishPosition(250);
         QCOMPARE(controller.positionMs(), qint64(42000));
 
         engine.emitPositionOnSeek = false;
         engine.resetPositionAfterPlay = true;
         controller.play();
         QCOMPARE(controller.state(), int(PlaybackController::Playing));
+        QCOMPARE(engine.loadCount, 2);
         QCOMPARE(controller.positionMs(), qint64(42000));
         QCOMPARE(engine.seekPosition, qint64(42000));
 
@@ -557,10 +577,58 @@ private slots:
         QCOMPARE(controller.state(), int(PlaybackController::Playing));
         QCOMPARE(controller.positionMs(), qint64(42000));
 
+        engine.publishPosition(900);
+        QCOMPARE(controller.positionMs(), qint64(42000));
         engine.publishPosition(42100);
         QCOMPARE(controller.positionMs(), qint64(42100));
         engine.publishStopped();
         QCOMPARE(controller.state(), int(PlaybackController::Idle));
+    }
+
+    void reloadsAfterSailfish51StoppedPauseBackend()
+    {
+        FakeService service;
+        FakeAudioEngine engine;
+        PlaybackController controller(&service, &engine);
+        controller.replaceQueue(tracks(1));
+        service.succeed();
+        engine.publishDuration(180000);
+        engine.publishPosition(42000);
+
+        controller.pause();
+        engine.publishStopped();
+        QCOMPARE(controller.state(), int(PlaybackController::Paused));
+        QCOMPARE(controller.positionMs(), qint64(42000));
+
+        engine.emitPositionOnSeek = false;
+        controller.play();
+        QCOMPARE(engine.loadCount, 2);
+        QCOMPARE(engine.seekPosition, qint64(42000));
+        QCOMPARE(controller.state(), int(PlaybackController::Playing));
+        engine.publishPosition(42100);
+        QCOMPARE(controller.positionMs(), qint64(42100));
+    }
+
+    void keepsSailfish52DirectPauseResumePath()
+    {
+        FakeService service;
+        FakeAudioEngine engine;
+        PlaybackController controller(&service, &engine);
+        controller.replaceQueue(tracks(1));
+        service.succeed();
+        engine.publishDuration(180000);
+        engine.publishPosition(42000);
+
+        controller.pause();
+        QCOMPARE(controller.state(), int(PlaybackController::Paused));
+        controller.play();
+
+        QCOMPARE(engine.loadCount, 1);
+        QCOMPARE(engine.playCount, 2);
+        QCOMPARE(engine.seekPosition, qint64(42000));
+        QCOMPARE(controller.state(), int(PlaybackController::Playing));
+        engine.publishPosition(42100);
+        QCOMPARE(controller.positionMs(), qint64(42100));
     }
 };
 

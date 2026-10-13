@@ -8,12 +8,15 @@
 #include <QDebug>
 #include <QMetaObject>
 #include <QNetworkAccessManager>
+#include <QTimer>
 #include <QVariant>
 
 SessionStore::SessionStore(QqCookieJar *activeJar, QObject *parent)
     : QObject(parent)
     , m_activeJar(activeJar)
     , m_ownedCandidateManager(0)
+    , m_validationRetryTimer(new QTimer(this))
+    , m_validationRetries(0)
     , m_nextOperationId(1000000)
     , m_validationOperationId(0)
     , m_action(Action::None)
@@ -21,6 +24,9 @@ SessionStore::SessionStore(QqCookieJar *activeJar, QObject *parent)
     , m_loggedIn(false)
     , m_removalPending(false)
 {
+    m_validationRetryTimer->setSingleShot(true);
+    connect(m_validationRetryTimer, &QTimer::timeout,
+            this, &SessionStore::retryValidation);
     initializeValidationObjects();
 }
 
@@ -33,6 +39,8 @@ SessionStore::SessionStore(QqCookieJar *activeJar,
     , m_candidateJar(candidateJar)
     , m_validationService(validationService)
     , m_ownedCandidateManager(0)
+    , m_validationRetryTimer(new QTimer(this))
+    , m_validationRetries(0)
     , m_nextOperationId(1000000)
     , m_validationOperationId(0)
     , m_action(Action::None)
@@ -40,6 +48,9 @@ SessionStore::SessionStore(QqCookieJar *activeJar,
     , m_loggedIn(false)
     , m_removalPending(false)
 {
+    m_validationRetryTimer->setSingleShot(true);
+    connect(m_validationRetryTimer, &QTimer::timeout,
+            this, &SessionStore::retryValidation);
     if (m_validationService) {
         connect(m_validationService, &QqMusicService::createdLibraryReady,
                 this, &SessionStore::validationLibraryReady);
@@ -361,6 +372,16 @@ void SessionStore::validationFailed(const ServiceError &error)
                 && m_action != Action::ValidateCandidate)) {
         return;
     }
+    const bool transient = error.kind == ErrorKind::Offline
+        || error.kind == ErrorKind::Timeout
+        || (error.kind == ErrorKind::RateLimited && error.retryAfterMs <= 2000);
+    if (transient && m_validationRetries < 1) {
+        ++m_validationRetries;
+        m_validationOperationId = 0;
+        m_validationRetryTimer->start(qBound(200, error.retryAfterMs, 2000));
+        qInfo().noquote() << "qqmusic-login session validation_retry";
+        return;
+    }
     if (m_action == Action::Load
             && error.kind == ErrorKind::AuthenticationExpired) {
         setRemovalPending(true);
@@ -375,9 +396,27 @@ void SessionStore::validationFailed(const ServiceError &error)
     finishFailure(diagnosticCode);
 }
 
+void SessionStore::retryValidation()
+{
+    if (!m_validationService || m_candidateRecords.isEmpty()
+            || (m_action != Action::Load && m_action != Action::ValidateCandidate)
+            || m_validationStage == ValidationStage::None)
+        return;
+    if (++m_nextOperationId == 0)
+        ++m_nextOperationId;
+    m_validationOperationId = m_nextOperationId;
+    const QString uin = candidateUin(m_candidateRecords);
+    const bool started = m_validationStage == ValidationStage::AuthenticatedLibrary
+        ? m_validationService->requestCreatedLibrary(m_validationOperationId, uin)
+        : m_validationService->requestUser(m_validationOperationId, uin);
+    if (!started)
+        finishFailure(QStringLiteral("qq.session.validation.retry.start"));
+}
+
 void SessionStore::beginValidation(const QVector<CookieRecord> &records,
                                    Action action)
 {
+    m_validationRetries = 0;
     m_action = action;
     const ServiceResult<QVector<CookieRecord> > validated =
         CookiePolicy::validateAll(records, QDateTime::currentDateTimeUtc());
@@ -444,6 +483,8 @@ void SessionStore::reportFailure(const QString &diagnosticCode)
 
 void SessionStore::clearCandidate()
 {
+    m_validationRetryTimer->stop();
+    m_validationRetries = 0;
     if (m_candidateJar) {
         m_candidateJar->clearSession();
     }

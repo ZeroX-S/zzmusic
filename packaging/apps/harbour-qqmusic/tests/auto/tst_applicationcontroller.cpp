@@ -938,6 +938,14 @@ private slots:
         QCOMPARE(controller.loginDiagnosticCode(),
                  QStringLiteral("qq.login.mqtt.connect.send"));
 
+        loginFailure.kind = ErrorKind::Timeout;
+        loginFailure.diagnosticCode = QStringLiteral("qq.login.attempt.timeout");
+        manager.attemptFailed(QString(), loginFailure);
+        QCOMPARE(controller.loginStatus(), QStringLiteral("timeout"));
+        QVERIFY(controller.loginQrImage().isEmpty());
+        manager.attemptFailed(QStringLiteral("previous-attempt"), loginFailure);
+        QCOMPARE(controller.loginStatus(), QStringLiteral("timeout"));
+
         manager.stateChanged(NativeLoginManager::CandidateReady, QString());
 
         UserProfile profile;
@@ -956,6 +964,57 @@ private slots:
         QCOMPARE(controller.loginStatus(), QStringLiteral("error"));
         QVERIFY(!controller.loginCancellable());
         QVERIFY(changed.count() >= 6);
+    }
+
+    void oldSessionExpiryDoesNotInterruptCandidateValidation_data()
+    {
+        QTest::addColumn<QString>("oldUin");
+        QTest::newRow("different-account") << QStringLiteral("20002");
+        QTest::newRow("same-account-new-credentials") << QStringLiteral("10001");
+    }
+
+    void oldSessionExpiryDoesNotInterruptCandidateValidation()
+    {
+        QFETCH(QString, oldUin);
+        FakeMusicService service;
+        ApplicationController controller(&service);
+        QNetworkAccessManager network;
+        NativeLoginManager manager(&network, NativeLoginLimits());
+        QqCookieJar active;
+        SessionStore store(&active);
+        controller.setSessionStore(&store);
+        controller.setNativeLoginManager(&manager);
+        QSignalSpy expired(&controller, SIGNAL(authenticationExpired()));
+        UserProfile previousProfile;
+        previousProfile.uin = oldUin;
+        emit store.sessionActivated(previousProfile);
+        controller.refreshMyMusic();
+        const quint64 oldOperation = controller.myMusicOperationId();
+        const quint64 otherOldOperation = controller.collectedLibraryOperationId();
+        controller.search(QStringLiteral("query"));
+        const quint64 oldSearch = controller.searchOperationId();
+        manager.stateChanged(NativeLoginManager::CandidateReady, QString());
+        ServiceError oldRequest;
+        oldRequest.kind = ErrorKind::AuthenticationExpired;
+        oldRequest.operationId = oldOperation;
+        emit service.failed(oldRequest);
+        QCOMPARE(controller.loginStatus(), QStringLiteral("validating"));
+        QCOMPARE(expired.count(), 0);
+        QVERIFY(!store.removalPending());
+        UserProfile profile;
+        profile.uin = QStringLiteral("10001");
+        emit store.sessionActivated(profile);
+        QCOMPARE(controller.loginStatus(), QStringLiteral("success"));
+        QVERIFY(controller.loggedIn());
+        QVERIFY(controller.searchOperationId() != oldSearch);
+        emit service.failed(oldRequest);
+        oldRequest.operationId = otherOldOperation;
+        emit service.failed(oldRequest);
+        oldRequest.operationId = oldSearch;
+        emit service.failed(oldRequest);
+        QVERIFY(controller.loggedIn());
+        QVERIFY(!store.removalPending());
+        QCOMPARE(expired.count(), 0);
     }
 
     void invalidatesMyMusicWhenUserIdentityIsCleared()
@@ -1288,11 +1347,17 @@ private slots:
         QSignalSpy pendingChanged(
             &controller, SIGNAL(authenticationRemovalPendingChanged()));
 
+        controller.setUserUin(QStringLiteral("10001"));
+        controller.refreshMyMusic();
+        const quint64 createdOperation = controller.myMusicOperationId();
+        const quint64 collectedOperation = controller.collectedLibraryOperationId();
         service.fail(900, ErrorKind::AuthenticationExpired);
+        QVERIFY(!controller.authenticationRemovalPending());
+        service.fail(createdOperation, ErrorKind::AuthenticationExpired);
         QVERIFY(controller.authenticationRemovalPending());
         QCOMPARE(expired.count(), 1);
         QCOMPARE(pendingChanged.count(), 1);
-        service.fail(901, ErrorKind::AuthenticationExpired);
+        service.fail(collectedOperation, ErrorKind::AuthenticationExpired);
         QCOMPARE(expired.count(), 1);
 
         controller.confirmExpiredSessionRemoval();

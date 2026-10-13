@@ -78,6 +78,10 @@ equals(TEST_BASENAME, tst_appmetadata.cpp) {
         ../../src/login/nativeloginprotocol.cpp \
         ../../src/login/nativelogintransport.cpp \
         ../../src/login/nativeloginmanager.cpp
+} else:equals(TEST_BASENAME, tst_nativelogintransport.cpp) {
+    QT += network
+    HEADERS += ../../src/login/nativelogintransport.h
+    SOURCES += ../../src/login/nativelogintransport.cpp
 } else:equals(TEST_BASENAME, tst_nativemqttprotocol.cpp) {
     HEADERS += ../../src/login/nativemqttprotocol.h
     SOURCES += ../../src/login/nativemqttprotocol.cpp

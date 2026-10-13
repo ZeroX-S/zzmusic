@@ -9,6 +9,8 @@
 
 namespace {
 
+const qint64 PauseResumePositionToleranceMs = 1500;
+
 QString qualityCode(const QString &bitrate)
 {
     if (bitrate == QLatin1String("FLAC lossless")) {
@@ -101,7 +103,9 @@ PlaybackController::PlaybackController(QqMusicService *service,
     , m_resumeAfterInterruption(false)
     , m_pausePositionGuard(false)
     , m_pauseBackendResetLogged(false)
+    , m_pauseBackendNeedsReload(false)
     , m_pausedPositionMs(0)
+    , m_pausedDurationMs(0)
 {
     m_shuffleRandomState = quint32(QDateTime::currentMSecsSinceEpoch())
         ^ quint32(quintptr(this));
@@ -369,6 +373,13 @@ void PlaybackController::play()
     if (m_state == Paused && m_location.url.isValid()
             && m_location.expiresAt > QDateTime::currentDateTimeUtc()) {
         if (m_engine) {
+            if (m_pausePositionGuard && m_pauseBackendNeedsReload) {
+                m_pendingSeekMs = m_pausedPositionMs;
+                m_pauseBackendNeedsReload = false;
+                setState(Loading);
+                m_engine->load(m_location.url);
+                return;
+            }
             if (m_pausePositionGuard && m_pausedPositionMs > 0) {
                 m_engine->seek(m_pausedPositionMs);
             }
@@ -624,6 +635,9 @@ void PlaybackController::enginePaused()
 void PlaybackController::engineStopped()
 {
     if (m_pausePositionGuard) {
+        if (m_userPaused || !m_autoplay || m_state == Paused) {
+            m_pauseBackendNeedsReload = true;
+        }
         if (!m_pauseBackendResetLogged) {
             m_pauseBackendResetLogged = true;
             qInfo().noquote()
@@ -701,7 +715,13 @@ void PlaybackController::headsetRemoved()
 void PlaybackController::updatePosition(qint64 positionMs)
 {
     const qint64 bounded = qMax<qint64>(0, positionMs);
-    if (m_pausePositionGuard && bounded == 0 && m_pausedPositionMs > 0) {
+    const qint64 resumeFloor = qMax<qint64>(
+        0, m_pausedPositionMs - PauseResumePositionToleranceMs);
+    const bool pausedResetNoise = m_pausePositionGuard
+        && m_pausedPositionMs > 0
+        && ((m_state == Playing && bounded < resumeFloor)
+            || (m_state != Playing && bounded != m_pausedPositionMs));
+    if (pausedResetNoise) {
         if (!m_pauseBackendResetLogged) {
             m_pauseBackendResetLogged = true;
             qInfo().noquote()
@@ -710,7 +730,8 @@ void PlaybackController::updatePosition(qint64 positionMs)
         }
         return;
     }
-    if (m_pausePositionGuard && m_state == Playing && bounded > 0) {
+    if (m_pausePositionGuard && m_state == Playing
+            && (m_pausedPositionMs == 0 || bounded >= resumeFloor)) {
         clearPausePositionGuard();
     }
     if (m_positionMs != bounded) {
@@ -731,6 +752,18 @@ void PlaybackController::updatePosition(qint64 positionMs)
 void PlaybackController::updateDuration(qint64 durationMs)
 {
     const qint64 bounded = qMax<qint64>(0, durationMs);
+    if (m_pausePositionGuard && bounded == 0 && m_pausedDurationMs > 0) {
+        if (m_userPaused || !m_autoplay || m_state == Paused) {
+            m_pauseBackendNeedsReload = true;
+        }
+        if (!m_pauseBackendResetLogged) {
+            m_pauseBackendResetLogged = true;
+            qInfo().noquote()
+                << "zzmusic_playback component=controller"
+                << "event=pause_backend_reset_ignored signal=duration";
+        }
+        return;
+    }
     if (m_durationMs != bounded) {
         m_durationMs = bounded;
         emit durationChanged();
@@ -843,14 +876,18 @@ void PlaybackController::beginPausePositionGuard()
 {
     m_pausePositionGuard = true;
     m_pauseBackendResetLogged = false;
+    m_pauseBackendNeedsReload = false;
     m_pausedPositionMs = m_positionMs;
+    m_pausedDurationMs = m_durationMs;
 }
 
 void PlaybackController::clearPausePositionGuard()
 {
     m_pausePositionGuard = false;
     m_pauseBackendResetLogged = false;
+    m_pauseBackendNeedsReload = false;
     m_pausedPositionMs = 0;
+    m_pausedDurationMs = 0;
 }
 
 void PlaybackController::advance(bool manual, bool previousDirection)

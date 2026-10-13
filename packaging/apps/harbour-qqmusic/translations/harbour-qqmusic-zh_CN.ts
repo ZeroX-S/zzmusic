@@ -36,10 +36,6 @@
         <translation>排行榜</translation>
     </message>
     <message>
-        <source>%1 charts</source>
-        <translation>%1 个榜单</translation>
-    </message>
-    <message>
         <source>No discover content is available</source>
         <translation>暂无发现内容</translation>
     </message>
@@ -285,6 +281,30 @@
         <translation>无法登录</translation>
     </message>
     <message>
+        <source>Verify sign-in with a new QR code</source>
+        <translation>使用新二维码验证登录</translation>
+    </message>
+    <message>
+        <source>Sign-in failed. Please try again.</source>
+        <translation>登录失败，请重试。</translation>
+    </message>
+    <message>
+        <source>Unable to connect to the QR sign-in channel. Check the network and try again.</source>
+        <translation>无法连接二维码登录通道，请检查网络后重试。</translation>
+    </message>
+    <message>
+        <source>Unable to reach the QR code service. Check the network and try again.</source>
+        <translation>无法访问二维码服务，请检查网络后重试。</translation>
+    </message>
+    <message>
+        <source>The scanned account could not be verified. Please generate a new QR code.</source>
+        <translation>无法验证已扫码的账号，请生成新的二维码。</translation>
+    </message>
+    <message>
+        <source>The account was verified but the session could not be saved.</source>
+        <translation>账号验证成功，但无法保存会话。</translation>
+    </message>
+    <message>
         <source>Sign in to access My Music</source>
         <translation>登录后访问我的音乐</translation>
     </message>
@@ -342,14 +362,6 @@
     <message>
         <source>Nothing playing</source>
         <translation>暂无歌曲播放</translation>
-    </message>
-    <message>
-        <source>Format</source>
-        <translation>格式</translation>
-    </message>
-    <message>
-        <source>Sample rate</source>
-        <translation>采样率</translation>
     </message>
     <message>
         <source>Bitrate</source>

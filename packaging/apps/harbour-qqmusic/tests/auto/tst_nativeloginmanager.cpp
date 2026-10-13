@@ -449,7 +449,7 @@ private slots:
         QTRY_COMPARE(transport.sent.size(), 1);
         QVERIFY(!transport.sent.first().isEmpty());
         QCOMPARE(failureCount, 0);
-        QCOMPARE(manager.state(), NativeLoginManager::QrReady);
+        QCOMPARE(manager.state(), NativeLoginManager::Opening);
     }
 
     void distinguishesConnectSendFailure()
@@ -661,6 +661,206 @@ private slots:
             QVERIFY(failure.diagnosticCode.startsWith(
                 QStringLiteral("qq.login.mqtt.")));
         }
+    }
+
+    void exposesQrOnlyAfterSubscription()
+    {
+        ScriptedNetworkAccessManager network;
+        ScriptedTransport transport;
+        ReplyScript create;
+        create.body = createResponse();
+        network.scripts << create;
+        NativeLoginManager manager(&network, &transport, NativeLoginLimits());
+        int qrCount = 0;
+        connect(&manager, &NativeLoginManager::qrReady, this,
+                [&qrCount]() { ++qrCount; });
+        manager.start();
+        QTRY_COMPARE(transport.urls.size(), 1);
+        QCOMPARE(qrCount, 0);
+        QCOMPARE(manager.state(), NativeLoginManager::Opening);
+        transport.connectNow();
+        transport.deliver(QByteArray::fromHex("2003000000"));
+        QCOMPARE(qrCount, 0);
+        transport.deliver(QByteArray::fromHex("900400010000"));
+        QCOMPARE(qrCount, 1);
+        QCOMPARE(manager.state(), NativeLoginManager::QrReady);
+    }
+
+    void acceptsSplitAndCoalescedMqttPackets()
+    {
+        ScriptedNetworkAccessManager network;
+        ScriptedTransport transport;
+        ReplyScript create;
+        create.body = createResponse();
+        ReplyScript exchange;
+        exchange.body = exchangeResponse();
+        network.scripts << create << exchange;
+        NativeLoginManager manager(&network, &transport, NativeLoginLimits());
+        manager.start();
+        QTRY_COMPARE(transport.urls.size(), 1);
+        transport.connectNow();
+        transport.deliver(QByteArray::fromHex("20"));
+        QVERIFY(manager.active());
+        transport.deliver(QByteArray::fromHex("03000000900400010000")
+                          + mqttPublish("scanned", QByteArray()));
+        QCOMPARE(manager.state(), NativeLoginManager::Scanned);
+        const QByteArray candidate = mqttPublish("cookies", mqttCandidatePayload());
+        for (int i = 0; i < candidate.size(); ++i)
+            transport.deliver(candidate.mid(i, 1));
+        QTRY_COMPARE(manager.state(), NativeLoginManager::CandidateReady);
+        QCOMPARE(network.requests.size(), 2);
+    }
+
+    void acceptsPublicationBeforeSubAckWithoutEarlyCandidate()
+    {
+        ScriptedNetworkAccessManager network;
+        ScriptedTransport transport;
+        ReplyScript create;
+        create.body = createResponse();
+        ReplyScript exchange;
+        exchange.body = exchangeResponse();
+        network.scripts << create << exchange;
+        NativeLoginManager manager(&network, &transport, NativeLoginLimits());
+        manager.start();
+        QTRY_COMPARE(transport.urls.size(), 1);
+        transport.connectNow();
+        transport.deliver(QByteArray::fromHex("2003000000"));
+        transport.deliver(mqttPublish("scanned", QByteArray()));
+        transport.deliver(mqttPublish("cookies", mqttCandidatePayload()));
+        QCOMPARE(network.requests.size(), 1);
+        QVERIFY(manager.active());
+        transport.deliver(QByteArray::fromHex("900400010000"));
+        QTRY_COMPARE(manager.state(), NativeLoginManager::CandidateReady);
+        QCOMPARE(network.requests.size(), 2);
+    }
+
+    void ignoresLatePacketsAfterCancelAndCandidate()
+    {
+        for (int mode = 0; mode < 2; ++mode) {
+            ScriptedNetworkAccessManager network;
+            ScriptedTransport transport;
+            ReplyScript create;
+            create.body = createResponse();
+            ReplyScript exchange;
+            exchange.body = exchangeResponse();
+            network.scripts << create << exchange;
+            NativeLoginManager manager(&network, &transport, NativeLoginLimits());
+            int failures = 0;
+            connect(&manager, &NativeLoginManager::attemptFailed, this,
+                    [&failures]() { ++failures; });
+            manager.start();
+            QTRY_COMPARE(transport.urls.size(), 1);
+            transport.connectNow();
+            transport.deliver(QByteArray::fromHex("2003000000"));
+            transport.deliver(QByteArray::fromHex("900400010000"));
+            if (mode == 0) {
+                manager.cancel();
+            } else {
+                transport.deliver(mqttPublish("cookies", mqttCandidatePayload()));
+                transport.deliver(mqttPublish("cookies", mqttCandidatePayload()));
+                QTRY_COMPARE(manager.state(), NativeLoginManager::CandidateReady);
+            }
+            const NativeLoginManager::State terminal = manager.state();
+            transport.deliver(QByteArray::fromHex("3000"));
+            transport.deliver(mqttPublish("scanned", QByteArray()));
+            QCOMPARE(manager.state(), terminal);
+            QCOMPARE(failures, 0);
+        }
+    }
+
+    void detectsMissingPingResponseAndBoundsReconnects()
+    {
+        ScriptedNetworkAccessManager network;
+        ScriptedTransport transport;
+        ReplyScript create;
+        create.body = createResponse();
+        network.scripts << create;
+        NativeLoginLimits limits;
+        limits.maximumMqttFailures = 1;
+        limits.mqttRetryDelayMs = 1;
+        NativeLoginManager manager(&network, &transport, limits);
+        manager.start();
+        for (int connection = 1; connection <= 2; ++connection) {
+            QTRY_COMPARE(transport.urls.size(), connection);
+            transport.connectNow();
+            transport.deliver(QByteArray::fromHex("2003000000"));
+            transport.deliver(QByteArray::fromHex("900400010000"));
+            if (connection == 1) {
+                QVERIFY(QMetaObject::invokeMethod(&manager, "mqttKeepAlive"));
+                transport.deliver(QByteArray::fromHex("d000"));
+                QCOMPARE(manager.state(), NativeLoginManager::QrReady);
+                QVERIFY(QMetaObject::invokeMethod(&manager, "mqttKeepAlive"));
+                // A second interval without PINGRESP detects a half-open link.
+                QVERIFY(QMetaObject::invokeMethod(&manager, "mqttKeepAlive"));
+                QCOMPARE(manager.state(), NativeLoginManager::Opening);
+            } else {
+                transport.failNow(QStringLiteral("qq.login.websocket.network"));
+                QCOMPARE(manager.state(), NativeLoginManager::Failed);
+            }
+        }
+    }
+
+    void honorsBrokerKeepAliveDeadline()
+    {
+        ScriptedNetworkAccessManager network;
+        ScriptedTransport transport;
+        ReplyScript create;
+        create.body = createResponse();
+        network.scripts << create;
+        NativeLoginManager manager(&network, &transport, NativeLoginLimits());
+        manager.start();
+        QTRY_COMPARE(transport.urls.size(), 1);
+        transport.connectNow();
+        // CONNACK overrides the CONNECT keepalive with one second.
+        transport.deliver(QByteArray::fromHex("2006000003130001"));
+        transport.deliver(QByteArray::fromHex("900400010000"));
+        QTest::qWait(750);
+        QCOMPARE(transport.sent.size(), 3);
+        QCOMPARE(transport.sent.last(), QByteArray::fromHex("c000"));
+        transport.deliver(QByteArray::fromHex("d000"));
+        QCOMPARE(manager.state(), NativeLoginManager::QrReady);
+    }
+
+    void acceptedScanGetsIndependentExchangeTimeout()
+    {
+        ScriptedNetworkAccessManager network;
+        ScriptedTransport transport;
+        ReplyScript create;
+        create.body = createResponse();
+        ReplyScript exchange;
+        exchange.body = exchangeResponse();
+        exchange.neverFinish = true;
+        network.scripts << create << exchange;
+        NativeLoginLimits limits;
+        limits.attemptTimeoutCapMs = 250;
+        limits.exchangeTimeoutMs = 2000;
+        NativeLoginManager manager(&network, &transport, limits);
+        manager.start();
+        QTRY_COMPARE(transport.urls.size(), 1);
+        transport.connectNow();
+        transport.deliver(QByteArray::fromHex("2003000000"));
+        transport.deliver(QByteArray::fromHex("900400010000"));
+        transport.deliver(mqttPublish("cookies", mqttCandidatePayload()));
+        QCOMPARE(manager.state(), NativeLoginManager::Exchanging);
+        QTest::qWait(300);
+        QCOMPARE(manager.state(), NativeLoginManager::Exchanging);
+        QVERIFY(QMetaObject::invokeMethod(network.replies.last(), "deliver"));
+        QCOMPARE(manager.state(), NativeLoginManager::CandidateReady);
+    }
+
+    void rejectsOversizedMqttLengthBeforeBufferingPayload()
+    {
+        ScriptedNetworkAccessManager network;
+        ScriptedTransport transport;
+        ReplyScript create;
+        create.body = createResponse();
+        network.scripts << create;
+        NativeLoginManager manager(&network, &transport, NativeLoginLimits());
+        manager.start();
+        QTRY_COMPARE(transport.urls.size(), 1);
+        transport.connectNow();
+        transport.deliver(QByteArray::fromHex("30ffffff7f"));
+        QCOMPARE(manager.state(), NativeLoginManager::Failed);
     }
 
     void retriesTransportWithinLimitAndCancellationStopsIt()

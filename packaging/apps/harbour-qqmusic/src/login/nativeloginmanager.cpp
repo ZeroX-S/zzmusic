@@ -111,6 +111,7 @@ NativeLoginManager::NativeLoginManager(
     , m_mqttFailures(0)
     , m_mqttRedirects(0)
     , m_closingMqtt(false)
+    , m_pingOutstanding(false)
 {
     m_requestTimer->setSingleShot(true);
     m_attemptTimer->setSingleShot(true);
@@ -246,6 +247,8 @@ void NativeLoginManager::responseReadyRead()
 
 void NativeLoginManager::requestTimedOut()
 {
+    if (!active())
+        return;
     if (m_requestKind == RequestKind::None
             && m_mqttPhase != MqttPhase::None) {
         handleMqttFailure(QStringLiteral("qq.login.mqtt.timeout"));
@@ -267,7 +270,8 @@ void NativeLoginManager::attemptTimedOut()
 
 void NativeLoginManager::retryMqtt()
 {
-    if ((m_state == QrReady || m_state == Scanned)
+    if ((m_state == Opening || m_state == QrReady || m_state == Scanned)
+            && !m_qrId.isEmpty()
             && m_mqttPhase == MqttPhase::None && !m_reply) {
         startMqtt(m_serverReference);
     }
@@ -329,18 +333,22 @@ void NativeLoginManager::startMqtt(const QString &serverReference)
     clearMqtt();
     m_serverReference = serverReference;
     m_mqttPhase = MqttPhase::Opening;
+    m_requestTimer->start(m_limits.mqttConnectTimeoutMs);
     if (!m_transport->open(url, mqttHeaders())) {
         m_mqttPhase = MqttPhase::None;
         handleMqttFailure(QStringLiteral("qq.login.websocket.open"));
         return;
     }
-    m_requestTimer->start(m_limits.mqttConnectTimeoutMs);
 }
 
 void NativeLoginManager::sendExchangeRequest(const NativeLoginEvent &event)
 {
     clearReply();
     clearMqtt();
+    // The QR lifetime bounds scanning. A scan accepted just before expiry
+    // must get the complete, independently bounded HTTP exchange window.
+    m_attemptTimer->stop();
+    m_challenge = NativeQrChallenge();
     setState(Exchanging);
     const QByteArray body = NativeLoginProtocol::exchangeRequestBody(
         event.musicUin, event.qrId, event.token);
@@ -415,6 +423,7 @@ void NativeLoginManager::handleCreate(const QByteArray &body)
         return;
     }
     m_qrId = parsed.value.qrId;
+    m_challenge = parsed.value;
     m_mqttFailures = 0;
     m_mqttRedirects = 0;
     m_serverReference.clear();
@@ -428,16 +437,6 @@ void NativeLoginManager::handleCreate(const QByteArray &body)
         return;
     }
     m_attemptTimer->start(timeoutMs);
-    setState(QrReady);
-    qInfo().noquote().nospace()
-        << "qqmusic_login component=native event=qr_ready attempt="
-        << m_attemptId
-        << " bytes=" << parsed.value.png.size()
-        << " width=" << parsed.value.width
-        << " height=" << parsed.value.height
-        << " generation=" << m_generation;
-    emit qrReady(m_attemptId, parsed.value.png,
-                 parsed.value.width, parsed.value.height, m_generation);
     startMqtt();
 }
 
@@ -465,6 +464,49 @@ void NativeLoginManager::mqttConnected()
 }
 
 void NativeLoginManager::mqttBinaryMessageReceived(const QByteArray &message)
+{
+    if (m_mqttPhase == MqttPhase::None
+            || (m_state != Opening && m_state != QrReady && m_state != Scanned)) {
+        return;
+    }
+    // MQTT is a byte stream even over WebSocket: one binary message can
+    // contain part of a packet or multiple packets. Keep both bounds explicit.
+    if (message.size() > 256 * 1024
+            || m_mqttInput.size() + message.size() > 320 * 1024) {
+        finishFailure(ErrorKind::SchemaChanged,
+                      QStringLiteral("qq.login.mqtt.stream.size"));
+        return;
+    }
+    m_mqttInput.append(message);
+    while (m_mqttPhase != MqttPhase::None && m_mqttInput.size() >= 2) {
+        int remaining = 0;
+        int multiplier = 1;
+        int header = 1;
+        quint8 digit = 0;
+        do {
+            if (header >= m_mqttInput.size()) {
+                return;
+            }
+            digit = static_cast<quint8>(m_mqttInput.at(header++));
+            remaining += (digit & 0x7f) * multiplier;
+            if (remaining > NativeMqttProtocol::maximumRemainingLength()
+                    || (header == 5 && (digit & 0x80))) {
+                finishFailure(ErrorKind::SchemaChanged,
+                              QStringLiteral("qq.login.mqtt.stream.length"));
+                return;
+            }
+            multiplier *= 128;
+        } while (digit & 0x80);
+        if (m_mqttInput.size() < header + remaining) {
+            return;
+        }
+        const QByteArray packet = m_mqttInput.left(header + remaining);
+        m_mqttInput.remove(0, header + remaining);
+        handleMqttPacket(packet);
+    }
+}
+
+void NativeLoginManager::handleMqttPacket(const QByteArray &message)
 {
     NativeMqttProtocol::Packet packet;
     QByteArray diagnostic;
@@ -503,6 +545,11 @@ void NativeLoginManager::mqttBinaryMessageReceived(const QByteArray &message)
         qInfo().noquote().nospace()
             << "qqmusic_login component=native event=mqtt_connected attempt="
             << m_attemptId;
+        const int keepAliveMs = packet.serverKeepAliveSeconds > 0
+            ? qMin(m_limits.mqttKeepAliveIntervalMs,
+                   packet.serverKeepAliveSeconds * 500)
+            : m_limits.mqttKeepAliveIntervalMs;
+        m_keepAliveTimer->setInterval(qMax(1, keepAliveMs));
         const QByteArray subscribe = NativeMqttProtocol::subscribePacket(
             m_qrId.toLatin1(), 1);
         if (subscribe.isEmpty()) {
@@ -530,21 +577,51 @@ void NativeLoginManager::mqttBinaryMessageReceived(const QByteArray &message)
         }
         m_requestTimer->stop();
         m_mqttPhase = MqttPhase::Subscribed;
-        m_mqttFailures = 0;
-        m_keepAliveTimer->start(m_limits.mqttKeepAliveIntervalMs);
+        m_keepAliveTimer->start();
         qInfo().noquote().nospace()
             << "qqmusic_login component=native event=mqtt_subscribed attempt="
             << m_attemptId;
+        // Never offer a challenge before the subscription can receive its
+        // scan result. Reconnect hides an unscanned QR until SUBACK again.
+        if (m_state == Opening) {
+            setState(QrReady);
+            if (m_state != QrReady || m_mqttPhase != MqttPhase::Subscribed)
+                return;
+            qInfo().noquote().nospace()
+                << "qqmusic_login component=native event=qr_ready attempt="
+                << m_attemptId << " bytes=" << m_challenge.png.size()
+                << " width=" << m_challenge.width
+                << " height=" << m_challenge.height
+                << " generation=" << m_generation;
+            emit qrReady(m_attemptId, m_challenge.png,
+                         m_challenge.width, m_challenge.height, m_generation);
+        }
+        while (m_mqttPhase == MqttPhase::Subscribed
+                && !m_earlyPublications.isEmpty()) {
+            handleMqttPacket(m_earlyPublications.takeFirst());
+        }
         return;
     }
     if (packet.event == NativeMqttProtocol::EventPublish) {
         const QByteArray expectedTopic =
             QByteArrayLiteral("management.qrcode_login/")
             + m_qrId.toLatin1();
-        if (m_mqttPhase != MqttPhase::Subscribed
+        if ((m_mqttPhase != MqttPhase::Subscribed
+             && m_mqttPhase != MqttPhase::WaitingSubAck)
                 || packet.topic != expectedTopic) {
             finishFailure(ErrorKind::SchemaChanged,
                           QStringLiteral("qq.login.mqtt.publish.topic"));
+            return;
+        }
+        // MQTT permits a matching publication before SUBACK. Delay acting on
+        // it until the broker confirms this attempt's subscription.
+        if (m_mqttPhase == MqttPhase::WaitingSubAck) {
+            if (m_earlyPublications.size() >= 4) {
+                finishFailure(ErrorKind::SchemaChanged,
+                              QStringLiteral("qq.login.mqtt.publish.limit"));
+            } else {
+                m_earlyPublications.append(message);
+            }
             return;
         }
         handleMqttEvent(packet.eventType, packet.payload);
@@ -559,6 +636,10 @@ void NativeLoginManager::mqttBinaryMessageReceived(const QByteArray &message)
         return;
     }
     if (packet.event == NativeMqttProtocol::EventPingResp) {
+        if (m_mqttPhase == MqttPhase::Subscribed && m_pingOutstanding) {
+            m_pingOutstanding = false;
+            m_requestTimer->stop();
+        }
         return;
     }
     handleMqttFailure(QStringLiteral("qq.login.mqtt.disconnect"));
@@ -567,7 +648,7 @@ void NativeLoginManager::mqttBinaryMessageReceived(const QByteArray &message)
 void NativeLoginManager::mqttDisconnected()
 {
     if (!m_closingMqtt && m_mqttPhase != MqttPhase::None
-            && (m_state == QrReady || m_state == Scanned)) {
+            && (m_state == Opening || m_state == QrReady || m_state == Scanned)) {
         handleMqttFailure(QStringLiteral("qq.login.websocket.disconnected"));
     }
 }
@@ -575,15 +656,22 @@ void NativeLoginManager::mqttDisconnected()
 void NativeLoginManager::mqttFailed(const QString &diagnosticCode)
 {
     if (m_mqttPhase != MqttPhase::None
-            && (m_state == QrReady || m_state == Scanned)) {
+            && (m_state == Opening || m_state == QrReady || m_state == Scanned)) {
         handleMqttFailure(diagnosticCode);
     }
 }
 
 void NativeLoginManager::mqttKeepAlive()
 {
-    if (m_mqttPhase != MqttPhase::Subscribed || !m_transport
-            || !m_transport->sendBinaryMessage(
+    if (m_mqttPhase != MqttPhase::Subscribed)
+        return;
+    if (m_pingOutstanding) {
+        handleMqttFailure(QStringLiteral("qq.login.mqtt.ping.timeout"));
+        return;
+    }
+    m_pingOutstanding = true;
+    m_requestTimer->start(m_limits.mqttAckTimeoutMs);
+    if (!m_transport || !m_transport->sendBinaryMessage(
                 NativeMqttProtocol::pingRequestPacket())) {
         handleMqttFailure(QStringLiteral("qq.login.mqtt.ping-request"));
     }
@@ -645,6 +733,8 @@ void NativeLoginManager::handleMqttFailure(const QString &diagnosticCode)
         finishFailure(ErrorKind::Offline, diagnosticCode);
         return;
     }
+    if (m_state == QrReady)
+        setState(Opening);
     qInfo().noquote().nospace()
         << "qqmusic_login component=native event=mqtt_retry attempt="
         << m_attemptId << " count=" << m_mqttFailures;
@@ -653,7 +743,7 @@ void NativeLoginManager::handleMqttFailure(const QString &diagnosticCode)
 
 void NativeLoginManager::scheduleMqttRetry()
 {
-    if (m_state != QrReady && m_state != Scanned) {
+    if (m_state != Opening && m_state != QrReady && m_state != Scanned) {
         return;
     }
     m_retryTimer->start(qMax(0, m_limits.mqttRetryDelayMs));
@@ -707,6 +797,9 @@ void NativeLoginManager::clearMqtt()
     }
     m_retryTimer->stop();
     m_keepAliveTimer->stop();
+    m_pingOutstanding = false;
+    m_mqttInput.clear();
+    m_earlyPublications.clear();
     m_mqttPhase = MqttPhase::None;
     if (m_transport) {
         m_closingMqtt = true;
@@ -720,6 +813,7 @@ void NativeLoginManager::clearAttemptData()
     m_attemptTimer->stop();
     clearMqtt();
     m_qrId.clear();
+    m_challenge = NativeQrChallenge();
     m_serverReference.clear();
     m_generation = 0;
     m_mqttFailures = 0;

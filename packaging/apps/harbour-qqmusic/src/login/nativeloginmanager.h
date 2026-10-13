@@ -111,6 +111,7 @@ private:
                    int timeoutMs,
                    int maximumResponseBytes);
     void handleCreate(const QByteArray &body);
+    void handleMqttPacket(const QByteArray &message);
     void handleMqttEvent(const QString &eventType,
                          const QByteArray &payload);
     void handleExchange(const QByteArray &body);
@@ -139,10 +140,14 @@ private:
     QString m_attemptId;
     QString m_qrId;
     QString m_serverReference;
+    NativeQrChallenge m_challenge;
+    QByteArray m_mqttInput;
+    QList<QByteArray> m_earlyPublications;
     int m_generation;
     int m_mqttFailures;
     int m_mqttRedirects;
     bool m_closingMqtt;
+    bool m_pingOutstanding;
 };
 
 #endif

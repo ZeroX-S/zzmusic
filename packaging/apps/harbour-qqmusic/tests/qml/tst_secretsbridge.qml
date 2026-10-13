@@ -92,9 +92,9 @@ TestCase {
         compare(findRequest.filterOperator,
                 Secrets.SecretManager.OperatorAnd)
         compare(createRequest.userInteractionMode,
-                Secrets.SecretManager.PreventInteraction)
+                Secrets.SecretManager.SystemInteraction)
         compare(storeRequest.userInteractionMode,
-                Secrets.SecretManager.PreventInteraction)
+                Secrets.SecretManager.SystemInteraction)
         compare(deleteCurrentRequest.collectionName,
                 secretsStore.sessionCollectionName)
         compare(deleteFallbackRequest.collectionName,

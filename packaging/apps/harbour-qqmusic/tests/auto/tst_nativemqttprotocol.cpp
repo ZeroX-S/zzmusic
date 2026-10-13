@@ -130,6 +130,15 @@ private slots:
         QCOMPARE(packet.event, NativeMqttProtocol::EventDisconnect);
     }
 
+    void validatesServerKeepAlive()
+    {
+        NativeMqttProtocol::Packet packet;
+        QVERIFY(NativeMqttProtocol::parse(QByteArray::fromHex("2006000003130001"), &packet));
+        QCOMPARE(packet.serverKeepAliveSeconds, 1);
+        QVERIFY(!NativeMqttProtocol::parse(QByteArray::fromHex("2009000006130001130002"), &packet));
+        QVERIFY(!NativeMqttProtocol::parse(QByteArray::fromHex("900700010313000100"), &packet));
+    }
+
     void extractsPublishTypeAndPayload()
     {
         NativeMqttProtocol::Packet packet;

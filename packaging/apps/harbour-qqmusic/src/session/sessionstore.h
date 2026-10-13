@@ -10,6 +10,7 @@
 class QNetworkAccessManager;
 class QqCookieJar;
 class QqMusicService;
+class QTimer;
 
 class SessionStore : public QObject
 {
@@ -61,6 +62,7 @@ private slots:
         const QVector<PlaylistSummary> &created);
     void validationReady(quint64 operationId, const UserProfile &profile);
     void validationFailed(const ServiceError &error);
+    void retryValidation();
 
 private:
     enum class Action {
@@ -94,6 +96,8 @@ private:
     QPointer<QqMusicService> m_validationService;
     QPointer<QObject> m_bridge;
     QNetworkAccessManager *m_ownedCandidateManager;
+    QTimer *m_validationRetryTimer;
+    int m_validationRetries;
     QVector<CookieRecord> m_candidateRecords;
     UserProfile m_candidateProfile;
     UserProfile m_profile;
